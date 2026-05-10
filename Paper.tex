@@ -1,0 +1,651 @@
+\documentclass{article}
+
+\usepackage[final]{neurips_2024}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{microtype}
+\usepackage{xcolor}
+
+\title{Benchmarking Fine-Tuning Strategies for Pretrained Protein Language Models in Enzyme Commission Classification}
+
+\author{
+Shruti Narayanan \\
+Virginia Tech \\
+\texttt{shruti22@vt.edu}
+\And
+Shoumik Bisoi \\
+Virginia Tech \\
+\texttt{shoumik77@vt.edu}
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+
+Protein function annotation is a fundamental problem in computational biology, with applications in enzyme discovery, drug development, and biological pathway analysis. Recent protein language models (PLMs) such as ESM2 have demonstrated strong representation learning capabilities for protein sequences, but the effectiveness of different fine-tuning strategies on downstream classification tasks remains an active area of investigation. In this work, we benchmark two transfer learning strategies, linear probing and full fine-tuning, for Enzyme Commission (EC) classification using the pretrained ESM2 model (facebook/esm2\_t6\_8M\_UR50D). Experiments were conducted using the lightonai/SwissProt-EC-leaf dataset from HuggingFace. To create a controlled and computationally tractable benchmark, experiments focused on the 20 most frequent EC classes after converting multi-label annotations into single-label classification. The primary benchmark used 5,000 training samples, 1,000 validation samples, and 1,000 test samples. Results showed that linear probing achieved 81.2\% test accuracy with a macro F1-score of 0.8007, while full fine-tuning improved performance to 84.5\% accuracy and a macro F1-score of 0.8345 at the cost of increased runtime. Additional reduced-data experiments demonstrated lower performance under smaller subset sizes, highlighting the impact of training data scale on PLM adaptation. These findings demonstrate that pretrained protein representations contain substantial functional information and that full parameter adaptation can provide measurable gains for EC classification tasks.
+
+
+\end{abstract}
+
+\section{Introduction}
+Protein function annotation is one of the most important and difficult problems in computational biology because it plays a large role in areas such as drug discovery, enzyme engineering, and understanding of biological systems. Modern biological databases, such as UniProt, now contain hundreds of millions of protein sequences. However, experimentally determining the function of every protein is infeasible at scale because of its cost, labor, and time requirements. Because of this, machine learning approaches, such as protein language models (PLMs), are being considered by researchers as an alternative for predicting protein function directly from sequence data.
+
+In recent years, PLMs such as ESM2 and ProtBERT, have shown strong performance across many biological tasks. These models are trained on extremely large protein datasets using learning that is self supervised. This allows them to learn meaningful representations of protein sequences without needing labeled data. However, there is still a key question that remains: what is the best way to adapt these pretrained models for specific downstream tasks?
+
+To find an answer to this question, we can consider two common approaches. These approaches are linear probing and full fine tuning. Linear probing is where the pretrained model is frozen and only a small classifier layer is trained on the new task. This method is faster and requires less computational power. For full fine tuning, the entire model is updated during training so that it could potentially be better adapted to the task specific data. This approach is more computationally expensive, but on the bright side, it often leads to better performance because the model can learn features that are more specialized for the task.
+This difference applies in the real world too, and is not just important from a research perspective. In applications such as drug discovery, even minuscule improvements in prediction accuracy can have massive economic and scientific impact and save millions of dollars over time. Developing a new drug is extremely expensive, and estimates place the average cost at around \$2.6 billion, much of which comes from failed candidates during the screening and testing process (DiMasi et al., 2016). More accurate computational models can help reduce false positives and false negatives, which may lower experimental costs and help with faster development.
+
+This issue also exists in industrial biotechnology, where incorrect enzyme classification can create wasteful inefficiencies during manufacturing. Misclassifications may lead to wasted reagents, lower production yields, and longer optimization cycles before a usable product is achieved. Models that are fine tuned on task specific data may do a better job at interpreting more subtle biological patterns. This can help reduce inefficiencies and improve performance. 
+
+Even though there are potential benefits, many practical applications still rely on simpler approaches like linear probing since they require less computational power, less training time, and are easier to implement. This creates a trade off between computational cost and predictive performance. So, it is important for researchers and practitioners to understand when the added cost of fine tuning is justified.
+
+In this project, we compare linear probing and full fine tuning for enzyme classification using the pretrained ESM2 model. Using a controlled subset of the SwissProt EC dataset, we evaluate both approaches using accuracy and macro F1 score. Our results show that full fine tuning consistently outperforms linear probing, demonstrating the benefits of task specific adaptation. Overall, this work shows the importance of balancing computational efficiency with predictive performance in real world protein classification tasks.
+
+\section{Related Work}
+Traditional computational approaches for protein function prediction relied heavily on sequence alignment and handcrafted biological features. Methods such as BLAST and profile Hidden Markov Models (HMMs) compare unknown protein sequences against databases of annotated proteins to determine functional similarity. These methods can work well in the case when proteins are closely related, but they often struggle when sequence similarity is low or when new proteins do not have known homologs in existing databases. In addition, alignment based methods become more computationally expensive as biological sequence databases continue to grow. Because of these limitations researchers have been exploring more machine learning methods that have the ability to learn patterns directly from raw protein sequences.
+
+Early machine learning methods for protein classification most commonly used manually engineered features bsaed on amino acid composition, physicochemical properties, or structural descriptors. Traditional classifiers such as support vector machines, random forests, and gradient boosting methods demonstrated moderate success on specific biological tasks, including enzyme classification and subcellular localization. However, these methods depended heavily on domain-specific feature engineering and often struggled to generalize across diverse protein families. Furthermore, handcrafted features may fail to capture the complex contextual dependencies and long-range interactions present within protein sequences.
+
+Recent advances in deep learning have significantly transformed biological sequence modeling. Inspired by developments in natural language processing, transformer-based protein language models (PLMs) treat amino acid sequences similarly to text sequences and learn contextual protein representations through large-scale self-supervised pretraining. Models such as ProtBERT, ProtT5, and Evolutionary Scale Modeling (ESM) have demonstrated strong performance across a wide range of downstream biological tasks. These models are trained on millions of unlabeled protein sequences, enabling them to capture structural, evolutionary, and biochemical relationships without requiring explicit biological annotations during pretraining.
+
+Among these approaches, ESM-based architectures have shown particularly strong representation learning capabilities. The ESM family of models applies transformer encoders to protein sequences and has achieved competitive performance in structure prediction, mutation effect prediction, and protein function annotation tasks. Because these models learn rich latent representations from large biological corpora, they can be adapted to downstream tasks through transfer learning rather than training task-specific models from scratch. This transfer learning paradigm is especially important in biology, where labeled datasets are often limited and expensive to obtain.
+
+Despite the success of protein language models, there remains significant variation in how pretrained models are adapted to downstream tasks. Two common adaptation strategies are linear probing and full fine-tuning. Linear probing freezes the pretrained encoder and trains only a lightweight classifier head, reducing computational cost and training complexity. In contrast, full fine-tuning updates all model parameters, allowing deeper task-specific adaptation but requiring greater computational resources and potentially increasing the risk of overfitting on smaller datasets. Prior work in natural language processing and computer vision has explored these transfer learning strategies extensively, but fewer studies have systematically compared them within protein classification settings under constrained computational environments.
+
+Another major challenge in protein function prediction is the highly imbalanced nature of biological label spaces. Enzyme Commission classification datasets frequently contain hundreds or thousands of labels with uneven sample distributions, creating difficulties for stable model training and evaluation. Rare classes may contain very few examples, making it difficult for models to learn robust decision boundaries. As a result, many studies simplify evaluation through filtered benchmarks, reduced label spaces, or top-class subsets in order to create more interpretable and computationally manageable experiments.
+
+This work builds upon recent advances in protein language modeling by benchmarking linear probing and full fine-tuning strategies using the pretrained ESM2 model on enzyme classification tasks derived from the SwissProt EC dataset. Unlike traditional feature-engineering approaches, our pipeline relies entirely on pretrained sequence representations learned through self-supervised training. In addition, this work focuses specifically on comparing adaptation strategies and computational tradeoffs rather than proposing a new model architecture. By evaluating both predictive performance and runtime behavior under controlled benchmark settings, this study contributes to understanding how transfer learning strategies impact downstream protein function classification performance.
+\section{Methodology}
+
+\subsection{Problem Formulation}
+
+We formulate protein function annotation as a supervised multi-class sequence classification problem. Each input protein is represented as an amino acid sequence:
+
+\[
+x = (a_1, a_2, ..., a_n)
+\]
+
+where each \(a_i\) is an amino acid token and \(n\) is the sequence length. The goal is to predict an Enzyme Commission label:
+
+\[
+y \in \{1, 2, ..., K\}
+\]
+
+where \(K\) is the number of EC classes included in the benchmark. In the primary controlled experiment, \(K = 20\), corresponding to the 20 most frequent EC labels in the training split. The model receives a raw protein sequence as input and outputs a probability distribution over the EC classes. The predicted class is the label with the highest probability:
+
+\[
+\hat{y} = \arg\max_k P(y = k \mid x)
+\]
+
+This setup allows us to compare how different fine-tuning strategies affect downstream EC classification performance.
+
+\subsection{Dataset}
+
+Experiments were conducted using the \texttt{lightonai/SwissProt-EC-leaf} dataset from HuggingFace. This dataset contains Swiss-Prot protein sequences paired with Enzyme Commission annotations. Each example includes a protein sequence, one or more EC labels, a readable label field, and a protein identifier.
+
+Because the original dataset contains multi-label annotations, we converted the task into single-label classification by selecting the first EC label from each example. This simplification allowed the use of standard multi-class classification objectives while preserving the biological task of enzyme function annotation.
+
+The original EC label space was highly sparse, with over one thousand unique labels in the sampled training subset. To create a more stable and interpretable benchmark, we selected the 20 most frequent EC labels from the training split. The training, validation, and test splits were then filtered to contain only proteins belonging to these top-20 classes. All labels were remapped to integer IDs from 0 to 19.
+
+The primary benchmark used:
+\begin{itemize}
+    \item 5,000 training examples
+    \item 1,000 validation examples
+    \item 1,000 test examples
+\end{itemize}
+
+This fixed-size subset was chosen to make training computationally feasible while still providing enough examples for meaningful comparison between fine-tuning strategies.
+
+\subsection{Model Architecture}
+
+\subsubsection{ESM2 Backbone}
+
+The experiments use the pretrained ESM2 model \texttt{facebook/esm2\_t6\_8M\_UR50D} as the protein sequence encoder. ESM2 is a transformer-based protein language model pretrained on large collections of protein sequences. Similar to language models used in natural language processing, ESM2 learns contextual representations of tokens, except the tokens correspond to amino acids rather than words.
+
+Each protein sequence is tokenized using the ESM2 tokenizer. Sequences are padded or truncated to a maximum length of 256 tokens. The tokenized sequence is passed through the ESM2 transformer encoder, which produces contextual embeddings that capture information about amino acid identity, sequence position, and learned protein patterns.
+
+\subsubsection{Classification Head}
+
+For EC classification, a classification head is placed on top of the pretrained ESM2 encoder. The classifier maps the learned sequence representation to a vector of logits:
+
+\[
+z = W h + b
+\]
+
+where \(h\) is the representation produced by ESM2, \(W\) and \(b\) are trainable classifier parameters, and \(z\) is a vector of length \(K\), the number of EC classes. A softmax function converts these logits into class probabilities:
+
+\[
+P(y = k \mid x) = \frac{e^{z_k}}{\sum_{j=1}^{K} e^{z_j}}
+\]
+
+The model is trained using cross-entropy loss:
+
+\[
+\mathcal{L} = - \log P(y \mid x)
+\]
+
+This objective penalizes the model when it assigns low probability to the correct EC class.
+
+\subsection{Fine-Tuning Strategies}
+
+The main purpose of this project is to compare two transfer learning strategies for adapting a pretrained protein language model to EC classification.
+
+\subsubsection{Linear Probing}
+
+In the linear probing setup, the ESM2 encoder is frozen. This means the pretrained transformer parameters are not updated during training. Only the final classification head is trained.
+
+This approach tests how useful the pretrained ESM2 representations are without modifying the underlying model. Linear probing is computationally efficient because only a small number of parameters are updated. It also reduces the risk of overfitting, especially when the downstream dataset is limited.
+
+The training process can be summarized as:
+\begin{enumerate}
+    \item Tokenize each protein sequence.
+    \item Pass the sequence through frozen ESM2.
+    \item Train only the classifier head.
+    \item Evaluate predicted EC labels on validation and test sets.
+\end{enumerate}
+
+\subsubsection{Full Fine-Tuning}
+
+In the full fine-tuning setup, all model parameters are trainable. This includes both the ESM2 encoder and the classification head. Unlike linear probing, full fine-tuning allows the pretrained protein representations to adapt directly to the EC classification task.
+
+This approach is more flexible because the entire model can shift toward the downstream label structure. However, it is also more computationally expensive because many more parameters are updated during training. Full fine-tuning may also be more sensitive to hyperparameters such as learning rate, batch size, and number of epochs.
+
+The training process can be summarized as:
+\begin{enumerate}
+    \item Tokenize each protein sequence.
+    \item Pass the sequence through ESM2.
+    \item Update both ESM2 encoder weights and classifier weights.
+    \item Evaluate predicted EC labels on validation and test sets.
+\end{enumerate}
+
+\subsection{Training Configuration}
+
+Both fine-tuning strategies used the same dataset split, tokenizer, model backbone, and evaluation metrics to ensure a fair comparison. Training was performed using the HuggingFace \texttt{Trainer} API.
+
+The main training settings were:
+\begin{itemize}
+    \item Model: \texttt{facebook/esm2\_t6\_8M\_UR50D}
+    \item Dataset: \texttt{lightonai/SwissProt-EC-leaf}
+    \item Task: top-20 EC classification
+    \item Maximum sequence length: 256
+    \item Training examples: 5,000
+    \item Validation examples: 1,000
+    \item Test examples: 1,000
+    \item Batch size: 16
+    \item Epochs: 2
+    \item Linear probing learning rate: \(1 \times 10^{-3}\)
+    \item Full fine-tuning learning rate: \(2 \times 10^{-5}\)
+    \item Loss function: cross-entropy loss
+    \item Metrics: accuracy, macro F1-score, and runtime
+\end{itemize}
+
+Accuracy measures the overall fraction of correctly classified proteins. Macro F1-score averages F1-score across classes and is useful because it treats each EC class equally, regardless of class frequency. Runtime was recorded to compare the computational cost of each fine-tuning strategy.
+
+The overall pipeline is:
+
+\[
+\text{Protein sequence} \rightarrow \text{Tokenization} \rightarrow \text{ESM2 encoder} \rightarrow \text{Classification head} \rightarrow \text{EC prediction}
+\]
+
+This design allows direct comparison between freezing the pretrained encoder and updating the full model during training.
+\section{Experiments}
+
+\subsection{Experimental Setup}
+
+Experiments were conducted using the \texttt{lightonai/SwissProt-EC-leaf} dataset available through HuggingFace~\cite{huggingface}. The dataset contains protein amino acid sequences paired with Enzyme Commission (EC) annotations derived from Swiss-Prot proteins. Each example includes a protein sequence, EC labels, readable label strings, and a UniProt protein identifier.
+
+Because the original dataset contains multi-label annotations, the task was simplified into single-label classification by selecting the first EC label associated with each protein. Initial experiments performed on the full EC label space resulted in a highly sparse classification setting with over one thousand classes and significant class imbalance. To create a more stable and computationally manageable benchmark, experiments were restricted to the 20 most frequent EC labels in the training split. After filtering, the dataset was reduced from 178,302 to 22,099 training sequences, 23,010 to 2,788 validation sequences, and 22,183 to 2,734 test sequences. Labels were remapped to integer IDs from 0 to 19. The primary benchmark used 5,000 randomly sampled training examples, 1,000 validation examples, and 1,000 test examples, with a fixed random seed of 42 for reproducibility across both experimental pipelines.
+
+Two pretrained protein language models were evaluated under this benchmark: ESM-2 and ProtT5-XL. The experimental pipelines for each model are described below.
+
+\subsubsection*{ESM-2 Pipeline (Shruti Narayanan)}
+
+ESM-2 (\texttt{facebook/esm2\_t6\_8M\_UR50D})~\cite{lin2023esm} is a compact 8 million parameter encoder model pretrained on UniRef50 protein sequences. Sequences were tokenized using the ESM-2 tokenizer and padded or truncated to a maximum length of 256 tokens. Training and evaluation were performed using the HuggingFace Trainer framework. Two fine-tuning strategies were evaluated:
+
+\begin{enumerate}
+    \item \textbf{Linear Probing:} All pretrained ESM-2 encoder parameters were frozen and only the classification head was trained.
+    \item \textbf{Full Fine-Tuning:} All ESM-2 model parameters and the classification head were updated end-to-end during training.
+\end{enumerate}
+
+The ESM-2 training configuration was as follows:
+\begin{itemize}
+    \item Batch size: 16
+    \item Epochs: 2
+    \item Linear probing learning rate: $1 \times 10^{-3}$
+    \item Full fine-tuning learning rate: $2 \times 10^{-5}$
+    \item Optimizer: AdamW (HuggingFace default implementation)
+\end{itemize}
+
+\subsubsection*{ProtT5-XL Pipeline (Shoumik Bisoi)}
+
+ProtT5-XL (\texttt{Rostlab/prot\_t5\_xl\_uniref50})~\cite{elnaggar2021prottrans} is a 1.2 billion parameter encoder model pretrained on protein sequences using a T5 architecture. Protein sequences were space-separated at the amino acid level as required by the ProtT5 tokenizer, and rare amino acids (U, Z, O, B) were replaced with X prior to tokenization. Sequences were truncated to a maximum length of 256 tokens. Due to the model's size, all experiments used half-precision (fp16) inference and gradient checkpointing to manage GPU memory constraints on free-tier hardware (Google Colab, NVIDIA T4, 15GB VRAM). Full fine-tuning of ProtT5-XL was not evaluated due to GPU memory limitations. Two fine-tuning strategies were evaluated:
+
+\begin{enumerate}
+    \item \textbf{Linear Probing:} All ProtT5-XL encoder parameters were frozen. To enable efficient multi-epoch training, embeddings were pre-computed and cached prior to classifier training by performing a single forward pass over all training sequences and saving the mean-pooled 1024-dimensional hidden states to disk. The classification head was then trained on these fixed representations across 10 epochs.
+    \item \textbf{LoRA (Low-Rank Adaptation):} Low-rank adapter matrices with rank $r=16$ and scaling factor $\alpha=32$ were inserted into the query and value projection layers of all encoder attention blocks, following~\cite{hu2021lora}. This yielded 3,932,160 trainable parameters, representing 0.32\% of the total 1.2 billion parameter model. LoRA adapters were trained for 3 epochs with gradient checkpointing enabled.
+\end{enumerate}
+
+The ProtT5-XL training configuration was as follows:
+\begin{itemize}
+    \item Batch size: 4 (constrained by GPU memory)
+    \item Linear probing epochs: 10
+    \item LoRA epochs: 3
+    \item LoRA learning rate: $5 \times 10^{-5}$
+    \item Classifier head learning rate: $1 \times 10^{-3}$
+    \item Optimizer: AdamW
+    \item LoRA rank: $r = 16$, $\alpha = 32$, dropout $= 0.1$
+    \item LoRA target modules: query (\texttt{q}) and value (\texttt{v}) projection layers
+\end{itemize}
+
+All experiments were conducted using GPU acceleration through Google Colab (NVIDIA T4).
+
+\subsection{Evaluation Metrics}
+
+Model performance was evaluated using multiple metrics to capture both predictive quality and computational efficiency.
+
+\subsubsection{Accuracy}
+
+Accuracy measures the fraction of correctly classified proteins across the entire validation set:
+
+\begin{equation}
+    \text{Accuracy} = \frac{\text{Number of Correct Predictions}}{\text{Total Predictions}}
+\end{equation}
+
+Accuracy provides a general measure of classification performance but may be sensitive to class imbalance.
+
+\subsubsection{Macro F1-Score}
+
+Macro F1-score computes the F1-score independently for each class and averages the results equally across all classes. Unlike accuracy, macro F1-score gives equal importance to minority and majority classes, making it particularly appropriate for biological classification tasks with uneven class distributions. The F1-score is defined as:
+
+\begin{equation}
+    F_1 = 2 \cdot \frac{\text{Precision} \cdot \text{Recall}}{\text{Precision} + \text{Recall}}
+\end{equation}
+
+Macro F1-score was used as the primary metric for model comparison.
+
+\subsubsection{Validation Loss}
+
+Validation loss was monitored after each training epoch to track optimization behavior and evaluate generalization on unseen data. Cross-entropy loss was used during both training and evaluation.
+
+\subsubsection{Runtime}
+
+Wall-clock training time was recorded to compare the computational cost of each fine-tuning strategy, enabling analysis of the tradeoff between predictive performance and efficiency.
+
+\subsection{Baseline Methods}
+
+\subsubsection{Linear Probing}
+
+Linear probing served as the computationally efficient baseline for both models. The pretrained encoder remained fully frozen and only the final classification layer was trained. This approach evaluates the informativeness of pretrained protein embeddings without modifying the underlying encoder weights, and provides a lower bound on the performance achievable through fine-tuning.
+
+\subsubsection{Full Fine-Tuning (ESM-2)}
+
+Full fine-tuning served as the upper-bound adaptive baseline for ESM-2. All encoder parameters and classification head parameters were updated during training, allowing the pretrained protein representations to specialize toward the EC classification task at the cost of increased computational complexity.
+
+\subsubsection{LoRA Fine-Tuning (ProtT5-XL)}
+
+LoRA served as the parameter-efficient fine-tuning strategy for ProtT5-XL. Rather than updating all model weights, LoRA inserts trainable low-rank decomposition matrices into the attention layers, enabling effective adaptation at a fraction of the computational and memory cost of full fine-tuning~\cite{hu2021lora}. This strategy was selected for ProtT5-XL because the model's 1.2 billion parameters made full fine-tuning infeasible on available hardware, motivating the use of a more memory-efficient adaptation method.
+
+% ============================================================
+\section{Results}
+% ============================================================
+
+\subsection{Quantitative Performance}
+
+Table~\ref{tab:results} summarizes the performance of all four model-strategy combinations on the top-20 EC classification benchmark. Results are reported on the held-out validation set using accuracy, macro F1-score, and wall-clock runtime.
+
+\begin{table}[h]
+\centering
+\caption{Performance comparison of fine-tuning strategies across pretrained protein language models on the top-20 EC classification benchmark.}
+\label{tab:results}
+\begin{tabular}{llccc}
+\toprule
+\textbf{Model} & \textbf{Strategy} & \textbf{Val Accuracy} & \textbf{Macro F1} & \textbf{Runtime (s)} \\
+\midrule
+ESM-2 (8M)        & Linear Probing   & 0.8120 & 0.8007 & 31.28   \\
+ESM-2 (8M)        & Full Fine-Tuning & 0.8450 & 0.8345 & 95.94   \\
+ProtT5-XL (1.2B)  & Linear Probing   & 0.9160 & 0.9292 & 3.17    \\
+ProtT5-XL (1.2B)  & LoRA             & 0.9800 & 0.9812 & 4612.16 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+All four model-strategy combinations achieved strong performance on the top-20 EC classification benchmark. Across both models, more expressive fine-tuning strategies improved over linear probing baselines, though at varying computational costs. Notably, ProtT5-XL outperformed ESM-2 under every strategy, suggesting that model scale plays a significant role in downstream classification performance.
+
+\subsection{Linear Probing Performance}
+
+\subsubsection*{ESM-2 Linear Probing}
+
+ESM-2 linear probing achieved a validation accuracy of 81.2\% and a macro F1-score of 0.8007. In this configuration, the pretrained ESM-2 encoder remained frozen and only the classifier head was updated during training. These results demonstrate that even a compact 8 million parameter model, when trained via self-supervised pretraining on protein sequences, produces embeddings that are substantially informative for enzyme classification. The runtime of approximately 31 seconds makes this a highly practical baseline for resource-constrained settings.
+
+\subsubsection*{ProtT5-XL Linear Probing}
+
+ProtT5-XL linear probing achieved a validation accuracy of 91.6\% and a macro F1-score of 0.9292, outperforming ESM-2 linear probing by 10.4 percentage points in accuracy and 0.1285 in macro F1. This result was achieved with a completely frozen encoder, demonstrating that the richer representations learned by ProtT5-XL during pretraining on a larger and more diverse protein corpus transfer more effectively to the EC classification task. The embedding pre-computation and caching strategy reduced classifier training time to just 3.17 seconds, making ProtT5-XL linear probing both the second-best performing and second-fastest strategy overall.
+
+\subsection{Full Fine-Tuning Performance (ESM-2)}
+
+Full fine-tuning achieved the best ESM-2 performance, reaching 84.5\% validation accuracy and a macro F1-score of 0.8345 — improvements of 3.3 percentage points and 0.0338 macro F1 over ESM-2 linear probing. Allowing all encoder parameters to update end-to-end enabled the model to develop more task-specific representations, yielding measurable gains over frozen embeddings alone. However, these improvements came at the cost of a runtime increase from 31 seconds to approximately 96 seconds, more than three times longer than linear probing. Despite achieving higher classification performance, full fine-tuning ESM-2 still underperforms frozen ProtT5-XL linear probing, suggesting that model scale may be a more important factor than fine-tuning strategy for this task.
+
+\subsection{LoRA Fine-Tuning Performance (ProtT5-XL)}
+
+LoRA fine-tuning of ProtT5-XL achieved the strongest overall performance across all experiments, reaching a validation accuracy of 98.0\% and a macro F1-score of 0.9812. This represents an improvement of 6.4 percentage points in accuracy and 0.0520 in macro F1 over ProtT5-XL linear probing, achieved by training only 3,932,160 adapter parameters — 0.32\% of the total model. The ability of LoRA to substantially improve over a frozen ProtT5-XL baseline while modifying less than 1\% of parameters highlights the effectiveness of targeted low-rank adaptation for large protein language models. The primary cost of LoRA was runtime: training required 4,612 seconds compared to 3.17 seconds for linear probing, reflecting the need to run the full model forward and backward pass during each training step.
+
+\subsection{Performance versus Efficiency Tradeoff}
+
+The experiments reveal a clear tradeoff between predictive performance and computational efficiency across both models and strategies. Figure~\ref{fig:tradeoff} illustrates this relationship across all four conditions.
+
+ProtT5-XL linear probing occupies a particularly favorable position in this tradeoff space: it achieves 91.6\% accuracy in just 3.17 seconds, outperforming even ESM-2 full fine-tuning (84.5\%, 95.94 seconds) at a fraction of the runtime. This suggests that for large, well-pretrained models, frozen embeddings alone can surpass the performance of fully fine-tuned smaller models.
+
+LoRA achieves the highest classification performance but at a substantially higher runtime cost. For applications where accuracy is paramount and computational resources are available, LoRA represents the optimal strategy for large PLMs. For rapid experimentation or resource-constrained deployment, ProtT5-XL linear probing with pre-cached embeddings provides the best efficiency-performance balance.
+
+\subsection{Training Behavior}
+
+Both models demonstrated stable optimization behavior throughout training. ESM-2 linear probing and full fine-tuning converged within 2 epochs, consistent with the small dataset size and compact model architecture. ProtT5-XL linear probing converged steadily across 10 epochs, with validation accuracy improving from 55.8\% at epoch 1 to 91.6\% at epoch 10, indicating that the classifier head progressively learned to separate EC classes from the fixed embeddings.
+
+ProtT5-XL LoRA demonstrated rapid initial convergence, improving from 36.5\% training accuracy at batch 100 of epoch 1 to 97.5\% validation accuracy by the end of epoch 1. By epoch 3, validation accuracy stabilized at 98.0\%, suggesting that the model reached near-optimal performance within 3 epochs and that additional training would likely yield diminishing returns. No signs of instability, gradient explosion, or severe overfitting were observed across any of the four experimental conditions.
+
+\subsection{Model Initialization Warnings}
+
+During ProtT5-XL model initialization, HuggingFace reported several parameter warnings including an unexpected \texttt{lm\_head.weight} key and a tied weights notice. These warnings arose because ProtT5-XL was originally trained as an encoder-decoder language model. In these experiments, only the encoder component was loaded via \texttt{T5EncoderModel}, making the decoder-specific language modeling head irrelevant to the classification task. These warnings are expected behavior when adapting encoder-decoder checkpoints to encoder-only classification architectures and did not affect model training or evaluation.
+\section{Discussion}
+
+The experimental results demonstrate that pretrained protein language models contain substantial functional information that can be effectively transferred to downstream enzyme classification tasks. Both linear probing and full fine-tuning achieved strong performance on the top-20 EC classification benchmark, indicating that ESM2 embeddings capture biologically meaningful sequence patterns relevant to protein function annotation.
+
+One important observation from the experiments is that linear probing alone achieved relatively high accuracy and macro F1-score despite freezing the entire pretrained encoder. This suggests that ESM2 representations already encode significant functional and structural information learned during large-scale self-supervised pretraining. Because only the classification head was trained, linear probing was also computationally efficient and converged rapidly. These findings align with broader trends in transfer learning literature, where pretrained transformer representations often generalize effectively across downstream tasks with minimal adaptation.
+
+Full fine-tuning produced the best overall predictive performance, improving both accuracy and macro F1-score relative to linear probing. Updating the full ESM2 encoder allowed the model to specialize its representations toward distinctions between EC classes, resulting in stronger downstream classification capability. However, these gains came at the cost of substantially increased runtime and computational complexity. The experiments therefore highlight an important tradeoff between computational efficiency and predictive performance when adapting large protein language models.
+
+Another notable finding is the effect of dataset scale on model behavior. Reduced-data experiments using smaller filtered subsets produced noticeably lower performance, indicating that downstream adaptation quality is sensitive to the number of available labeled examples. This suggests that while pretrained protein representations are highly informative, sufficient task-specific training data remains important for stable downstream classification performance.
+
+Overall, the results support the growing role of transformer-based protein language models in computational biology. The ability to transfer representations learned from large unlabeled protein corpora provides a practical alternative to handcrafted biological feature engineering and may help accelerate automated protein annotation workflows in biomedical research.
+
+\subsection{Limitations}
+
+Several limitations should be considered when interpreting the results of this work.
+
+First, the experiments focused only on the 20 most frequent EC classes rather than the full EC label space. Although this filtering created a more stable and computationally tractable benchmark, it simplifies the overall protein function classification problem and excludes the vast majority of rare enzyme classes present in real biological datasets. Performance on the full 4,793-class label space, which was explored in preliminary experiments, remained substantially lower due to severe class imbalance and limited training examples per class.
+
+Second, the study used reduced dataset subsets rather than the complete SwissProt EC dataset. For ProtT5-XL experiments, only 10\% of the filtered training data was used for embedding pre-computation due to the time required to run a 1.2 billion parameter model over large sequence collections. For the primary top-20 benchmark, both models were trained on 5,000 examples rather than the full filtered training set of 22,099 sequences. These decisions were made primarily due to computational constraints associated with transformer-based training on free-tier GPU resources, and reported performance may not fully reflect behavior at larger data scales.
+
+Third, the two models evaluated in this study differed substantially in scale: ESM-2 with 8 million parameters and ProtT5-XL with 1.2 billion parameters. While this comparison illuminates the effect of model scale on downstream performance, it conflates model size with fine-tuning strategy, making it difficult to isolate the contribution of each factor independently. A fairer comparison would evaluate the same fine-tuning strategies across models of comparable size.
+
+Fourth, the fine-tuning strategies evaluated were not identical across models. ESM-2 was evaluated under linear probing and full fine-tuning, while ProtT5-XL was evaluated under linear probing and LoRA, as full fine-tuning of ProtT5-XL was infeasible on available hardware. This asymmetry limits direct cross-model comparison of specific strategies.
+
+Fifth, the task was simplified into single-label classification by selecting only the first EC label associated with each protein. In reality, many proteins possess multiple functional annotations, and multi-label classification may provide a more biologically accurate representation of protein function.
+
+Finally, the experiments used relatively short training schedules and limited hyperparameter exploration. Additional tuning of learning rates, training epochs, batch sizes, LoRA rank, and sequence lengths may further improve downstream classification performance for all strategies.
+
+Despite these limitations, the experiments provide a reproducible benchmark for comparing transfer learning strategies across protein language models of different scales and demonstrate meaningful performance and efficiency differences between adaptation approaches.
+
+% ============================================================
+\section{Conclusion}
+% ============================================================
+
+In this work, we benchmarked fine-tuning strategies for pretrained protein language models on enzyme commission (EC) classification, comparing linear probing, full fine-tuning, and parameter-efficient adaptation via LoRA across two PLM backbones of substantially different scale.
+
+Our results demonstrate three key findings. First, model scale is a dominant factor in downstream classification performance. ProtT5-XL linear probing (91.6\% accuracy, 0.9292 macro F1) substantially outperformed ESM-2 full fine-tuning (84.5\% accuracy, 0.8345 macro F1), despite the former using a completely frozen encoder and the latter updating all model parameters. This suggests that the quality of pretrained representations, shaped by model capacity and pretraining data, may matter more than the choice of fine-tuning strategy for protein function prediction tasks.
+
+Second, parameter-efficient adaptation via LoRA enables strong performance at minimal parameter cost. ProtT5-XL LoRA achieved the best overall results across all experiments — 98.0\% accuracy and 0.9812 macro F1 — while training only 0.32\% of the model's parameters. This highlights LoRA as a practical and effective strategy for adapting large protein language models when full fine-tuning is computationally infeasible.
+
+Third, there exists a meaningful tradeoff between adaptation quality and computational efficiency. Linear probing with pre-cached embeddings is orders of magnitude faster than LoRA fine-tuning, making it well-suited for rapid experimentation and resource-constrained settings. Full fine-tuning and LoRA provide higher accuracy but require substantially greater compute, a tradeoff that becomes more pronounced as model size increases.
+
+Taken together, these findings suggest that practitioners working with large PLMs should prioritize model scale and parameter-efficient adaptation methods over full fine-tuning when computational resources are limited. For future work, several directions remain promising. Evaluating LoRA and full fine-tuning on models of comparable size would isolate the effect of adaptation strategy from model scale. Extending experiments to the full EC label space with appropriate class-balancing strategies would provide a more realistic benchmark. Additionally, exploring multi-label classification formulations and alternative parameter-efficient methods such as prefix tuning or adapter layers may further improve biological function prediction performance.
+
+% ============================================================
+
+\section*{References}
+
+% ============================================================
+% references.bib — NeurIPS 2024 formatted bibliography
+% Use \bibliographystyle{abbrvnat} in your main .tex file
+% ============================================================
+
+% ============================================================
+% Core Protein Language Models
+% ============================================================
+
+@article{rives2021esm,
+  author    = {Rives, Alexander and Meier, Joshua and Sercu, Tom and
+               Goyal, Siddharth and Lin, Zeming and Liu, Jason and
+               Guo, Demi and Ott, Myle and Zitnick, C.~Lawrence and
+               Ma, Jerry and Fergus, Rob},
+  title     = {Biological Structure and Function Emerge from Scaling
+               Unsupervised Learning to 250 Million Protein Sequences},
+  journal   = {Proceedings of the National Academy of Sciences},
+  volume    = {118},
+  number    = {15},
+  pages     = {e2016239118},
+  year      = {2021},
+  doi       = {10.1073/pnas.2016239118}
+}
+
+@article{lin2023esm,
+  author    = {Lin, Zeming and Akin, Halil and Rao, Roshan and
+               Hie, Brian and Zhu, Zhongkai and Lu, Wenting and
+               Smetanin, Nikita and Verkuil, Robert and Kabeli, Ori and
+               Shmueli, Yaniv and {dos Santos Costa}, Allan and
+               Fazel-Zarandi, Maryam and Sercu, Tom and
+               Candido, Salvatore and Rives, Alexander},
+  title     = {Evolutionary-Scale Prediction of Atomic-Level Protein
+               Structure with a Language Model},
+  journal   = {Science},
+  volume    = {379},
+  number    = {6637},
+  pages     = {1123--1130},
+  year      = {2023},
+  doi       = {10.1126/science.ade2574}
+}
+
+@article{elnaggar2021prottrans,
+  author    = {Elnaggar, Ahmed and Heinzinger, Michael and Dallago, Christian and
+               Rehawi, Ghalia and Wang, Yu and Jones, Llion and Gibbs, Tom and
+               Feher, Tamas and Angerer, Christoph and Steinegger, Martin and
+               Bhowmik, Debsindhu and Rost, Burkhard},
+  title     = {{ProtTrans}: Towards Cracking the Language of Life's Code Through
+               Self-Supervised Deep Learning and High Performance Computing},
+  journal   = {{IEEE} Transactions on Pattern Analysis and Machine Intelligence},
+  volume    = {44},
+  number    = {10},
+  pages     = {7112--7127},
+  year      = {2021},
+  doi       = {10.1109/TPAMI.2021.3095381}
+}
+
+@inproceedings{rao2019tape,
+  author    = {Rao, Roshan and Bhattacharya, Nicholas and Thomas, Neil and
+               Duan, Yan and Chen, Xi and Canny, John and Abbeel, Pieter and
+               Song, Yun~S.},
+  title     = {Evaluating Protein Transfer Learning with {TAPE}},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {32},
+  pages     = {9689--9701},
+  year      = {2019}
+}
+
+% ============================================================
+% Parameter-Efficient Fine-Tuning
+% ============================================================
+
+@misc{hu2021lora,
+  author        = {Hu, Edward~J. and Shen, Yelong and Wallis, Phillip and
+                   Allen-Zhu, Zeyuan and Li, Yuanzhi and Wang, Shean and
+                   Wang, Lu and Chen, Weizhu},
+  title         = {{LoRA}: Low-Rank Adaptation of Large Language Models},
+  year          = {2021},
+  archiveprefix = {arXiv},
+  eprint        = {2106.09685},
+  primaryclass  = {cs.CL}
+}
+
+@inproceedings{houlsby2019adapters,
+  author    = {Houlsby, Neil and Giurgiu, Andrei and Jastrzebski, Stanislaw and
+               Morrone, Bruna and {de Laroussilhe}, Quentin and Gesmundo, Andrea and
+               Attariyan, Mona and Gelly, Sylvain},
+  title     = {Parameter-Efficient Transfer Learning for {NLP}},
+  booktitle = {Proceedings of the 36th International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {97},
+  pages     = {2790--2799},
+  year      = {2019}
+}
+
+% ============================================================
+% Transformer Architecture
+% ============================================================
+
+@inproceedings{vaswani2017attention,
+  author    = {Vaswani, Ashish and Shazeer, Noam and Parmar, Niki and
+               Uszkoreit, Jakob and Jones, Llion and Gomez, Aidan~N. and
+               Kaiser, {\L}ukasz and Polosukhin, Illia},
+  title     = {Attention Is All You Need},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {30},
+  year      = {2017}
+}
+
+@inproceedings{devlin2019bert,
+  author    = {Devlin, Jacob and Chang, Ming-Wei and Lee, Kenton and
+               Toutanova, Kristina},
+  title     = {{BERT}: Pre-training of Deep Bidirectional Transformers
+               for Language Understanding},
+  booktitle = {Proceedings of the 2019 Conference of the North {A}merican
+               Chapter of the Association for Computational Linguistics:
+               Human Language Technologies},
+  pages     = {4171--4186},
+  year      = {2019},
+  doi       = {10.18653/v1/N19-1423}
+}
+
+@article{raffel2020t5,
+  author    = {Raffel, Colin and Shazeer, Noam and Roberts, Adam and
+               Lee, Katherine and Narang, Sharan and Matena, Michael and
+               Zhou, Yanqi and Li, Wei and Liu, Peter~J.},
+  title     = {Exploring the Limits of Transfer Learning with a Unified
+               Text-to-Text Transformer},
+  journal   = {Journal of Machine Learning Research},
+  volume    = {21},
+  number    = {140},
+  pages     = {1--67},
+  year      = {2020}
+}
+
+% ============================================================
+% Biological Databases
+% ============================================================
+
+@article{uniprot2023,
+  author    = {{UniProt Consortium}},
+  title     = {{UniProt}: The Universal Protein Knowledgebase in 2023},
+  journal   = {Nucleic Acids Research},
+  volume    = {51},
+  number    = {D1},
+  pages     = {D523--D531},
+  year      = {2023},
+  doi       = {10.1093/nar/gkac1052}
+}
+
+@article{swissprot,
+  author    = {Boeckmann, Brigitte and Bairoch, Amos and Apweiler, Rolf and
+               Blatter, Marie-Claude and Estreicher, Anne and Gasteiger, Elisabeth and
+               Martin, Maria~Jesus and Michoud, Karine and O'Donovan, Claire and
+               Phan, Isabelle and Pilbout, Sandrine and Schneider, Monica},
+  title     = {The {SWISS-PROT} Protein Knowledgebase and Its Supplement
+               {TrEMBL} in 2003},
+  journal   = {Nucleic Acids Research},
+  volume    = {31},
+  number    = {1},
+  pages     = {365--370},
+  year      = {2003},
+  doi       = {10.1093/nar/gkg095}
+}
+
+% ============================================================
+% Enzyme Function Prediction
+% ============================================================
+
+@article{sanderson2023protnlm,
+  author    = {Sanderson, Tomas and Bileschi, Maxwell~L. and Belanger, David and
+               Colwell, Lucy~J.},
+  title     = {{ProteInfer}, Deep Neural Networks for Protein Functional Inference},
+  journal   = {eLife},
+  volume    = {12},
+  pages     = {e80942},
+  year      = {2023},
+  doi       = {10.7554/eLife.80942}
+}
+
+% ============================================================
+% Transfer Learning
+% ============================================================
+
+@article{pan2010transfer,
+  author    = {Pan, Sinno~Jialin and Yang, Qiang},
+  title     = {A Survey on Transfer Learning},
+  journal   = {{IEEE} Transactions on Knowledge and Data Engineering},
+  volume    = {22},
+  number    = {10},
+  pages     = {1345--1359},
+  year      = {2010},
+  doi       = {10.1109/TKDE.2009.191}
+}
+
+% ============================================================
+% Tools and Frameworks
+% ============================================================
+
+@inproceedings{wolf2020huggingface,
+  author    = {Wolf, Thomas and Debut, Lysandre and Sanh, Victor and
+               Chaumond, Julien and Delangue, Clement and Moi, Anthony and
+               Cistac, Pierric and Rault, Tim and Louf, Remi and
+               Funtowicz, Morgan and Davison, Joe and Shleifer, Sam and
+               {von Platen}, Patrick and Ma, Clara and Jernite, Yacine and
+               Plu, Julien and Xu, Canwen and {Le Scao}, Teven and
+               Gugger, Sylvain and Drame, Mariama and Lhoest, Quentin and
+               Rush, Alexander},
+  title     = {Transformers: State-of-the-Art Natural Language Processing},
+  booktitle = {Proceedings of the 2020 Conference on Empirical Methods in
+               Natural Language Processing: System Demonstrations},
+  pages     = {38--45},
+  year      = {2020},
+  doi       = {10.18653/v1/2020.emnlp-demos.6}
+}
+
+@misc{peft2022,
+  author       = {Mangrulkar, Sourab and Gugger, Sylvain and Debut, Lysandre and
+                  Belkada, Younes and Paul, Sayak and Bossan, Benjamin},
+  title        = {{PEFT}: State-of-the-Art Parameter-Efficient Fine-Tuning Methods},
+  year         = {2022},
+  howpublished = {\url{https://github.com/huggingface/peft}}
+}
+
+@misc{huggingface,
+  author        = {Lhoest, Quentin and {Villanova del Moral}, Albert and
+                   Jernite, Yacine and Thakur, Abhishek and {von Platen}, Patrick and
+                   Patil, Suraj and Chaumond, Julien and Drame, Mariama and
+                   Plu, Julien and Bruschi, Lewis and Sala{\"{u}}n, Simon and
+                   Louf, R{\'{e}}mi and Canard, Elisa and Dalmia, Akash and
+                   Pierrot, Thomas and Schmid, Philipp and Fries, Jason and
+                   Launay, Julien and Bekman, Stas},
+  title         = {Datasets: A Community Library for Natural Language Processing},
+  year          = {2021},
+  archiveprefix = {arXiv},
+  eprint        = {2109.02846},
+  primaryclass  = {cs.CL}
+}
+
+@inproceedings{loshchilov2019adamw,
+  author    = {Loshchilov, Ilya and Hutter, Frank},
+  title     = {Decoupled Weight Decay Regularization},
+  booktitle = {International Conference on Learning Representations},
+  year      = {2019}
+}
+
+\end{document}
