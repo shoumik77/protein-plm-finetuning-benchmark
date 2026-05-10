@@ -152,6 +152,12 @@ If you use this code or results, please cite the key works this project builds o
 
 ---
 
+## AI Use Disclosure
+
+AI assistance (Claude by Anthropic) was used during this project primarily for debugging — resolving issues such as dtype mismatches, CUDA out-of-memory errors, and dependency conflicts encountered during model training. All experimental design, code architecture, analysis, and writing were completed by the authors.
+
+---
+
 ## License
 
 This project was completed as a course assignment at Virginia Tech. Code is provided for educational purposes.
